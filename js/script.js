@@ -1,217 +1,205 @@
-/* Expense & Budget Visualizer
-   Vanilla JS + Chart.js, data disimpan di Local Storage. */
+// ===== Expense & Budget Visualizer =====
+const CATEGORY_COLORS = { Food: "#2ecc71", Transport: "#3498db", Fun: "#e67e22" };
+const KEYS = { data: "ebv-transactions", theme: "ebv-theme" };
 
-// ---------- Konstanta ----------
-const STORAGE_KEYS = {
-  transactions: "ebv_transactions",
-  categories: "ebv_categories",
-  theme: "ebv_theme",
-  sort: "ebv_sort",
-};
-const DEFAULT_CATEGORIES = ["Food", "Transport", "Fun"];
-const CHART_COLORS = [
-  "#2ecc71", "#3498db", "#e67e22", "#9b59b6", "#e74c3c",
-  "#1abc9c", "#f1c40f", "#34495e", "#fd79a8", "#95a5a6",
-];
-const currency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-// ---------- Local Storage helper ----------
-function load(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch (err) {
-    return fallback;
-  }
-}
-
-function save(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (err) {
-    console.error("Failed to save data:", err);
-  }
-}
-
-// ---------- State ----------
-let transactions = load(STORAGE_KEYS.transactions, []);
-let categories = load(STORAGE_KEYS.categories, DEFAULT_CATEGORIES);
-let sortBy = load(STORAGE_KEYS.sort, "newest");
-let theme = load(STORAGE_KEYS.theme, "light");
+let transactions = JSON.parse(localStorage.getItem(KEYS.data)) || [];
 let chart = null;
 
-// ---------- Elemen DOM ----------
-const $ = (id) => document.getElementById(id);
-const form = $("transaction-form");
-const nameInput = $("item-name");
-const amountInput = $("item-amount");
-const categorySelect = $("item-category");
-const formError = $("form-error");
-const categoryForm = $("category-form");
-const newCategoryInput = $("new-category");
-const categoryError = $("category-error");
-const sortSelect = $("sort-by");
-const listEl = $("transaction-list");
-const listEmpty = $("list-empty");
-const totalEl = $("total-balance");
-const chartCanvas = $("spending-chart");
-const chartEmpty = $("chart-empty");
-const themeToggle = $("theme-toggle");
+const form = document.getElementById("transaction-form");
+const nameInput = document.getElementById("item-name");
+const amountInput = document.getElementById("amount");
+const categoryInput = document.getElementById("category");
+const errorEl = document.getElementById("form-error");
+const listEl = document.getElementById("transaction-list");
+const emptyEl = document.getElementById("empty-message");
+const totalEl = document.getElementById("total-balance");
+const sortSelect = document.getElementById("sort-select");
+const themeBtn = document.getElementById("theme-toggle");
+const monthlyList = document.getElementById("monthly-list");
+const monthlyEmpty = document.getElementById("monthly-empty");
 
-// ---------- Render ----------
-function renderCategories() {
-  const current = categorySelect.value;
-  categorySelect.innerHTML = "";
-  categories.forEach((name) => {
-    const option = document.createElement("option");
-    option.value = name;
-    option.textContent = name;
-    categorySelect.appendChild(option);
-  });
-  if (categories.includes(current)) categorySelect.value = current;
+const formatMoney = (n) => "$" + n.toFixed(2);
+
+function formatDate(date) {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${date.getFullYear()}`; // dd-mm-yyyy
 }
 
-function getSortedTransactions() {
+function save() {
+  localStorage.setItem(KEYS.data, JSON.stringify(transactions));
+}
+
+// ----- Add transaction -----
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = nameInput.value.trim();
+  const amount = parseFloat(amountInput.value);
+  const category = categoryInput.value;
+
+  if (!name || isNaN(amount) || amount <= 0 || !category) {
+    errorEl.textContent = "Please fill in all fields correctly (amount must be greater than 0).";
+    errorEl.hidden = false;
+    return;
+  }
+  errorEl.hidden = true;
+
+  transactions.push({ id: Date.now(), name, amount, category, date: formatDate(new Date()) });
+  save();
+  form.reset();
+  render();
+});
+
+// ----- Delete transaction -----
+function deleteTransaction(id) {
+  transactions = transactions.filter((t) => t.id !== id);
+  save();
+  render();
+}
+
+// ----- Sort -----
+function getSorted() {
   const list = [...transactions];
-  switch (sortBy) {
+  switch (sortSelect.value) {
     case "amount-desc": return list.sort((a, b) => b.amount - a.amount);
     case "amount-asc": return list.sort((a, b) => a.amount - b.amount);
     case "category": return list.sort((a, b) => a.category.localeCompare(b.category));
-    default: return list.sort((a, b) => b.id - a.id); // newest first
+    default: return list.sort((a, b) => b.id - a.id);
   }
 }
+sortSelect.addEventListener("change", renderList);
 
+// ----- Render: transaction list -----
 function renderList() {
   listEl.innerHTML = "";
-  listEmpty.hidden = transactions.length > 0;
+  emptyEl.hidden = transactions.length > 0;
 
-  getSortedTransactions().forEach((t) => {
+  getSorted().forEach((t) => {
     const li = document.createElement("li");
-    li.className = "item";
 
-    const info = document.createElement("div");
-    const name = document.createElement("p");
+    const info = document.createElement("article");
+    const name = document.createElement("span");
     name.className = "item-name";
     name.textContent = t.name;
-    const amount = document.createElement("p");
+    const amount = document.createElement("span");
     amount.className = "item-amount";
-    amount.textContent = currency.format(t.amount);
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.textContent = t.category;
-    info.append(name, amount, chip);
+    amount.textContent = formatMoney(t.amount);
+    const meta = document.createElement("p");
+    meta.className = "item-meta";
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = t.category;
+    const date = document.createElement("time");
+    date.className = "item-date";
+    date.textContent = t.date;
+    meta.append(tag, date);
+    info.append(name, amount, meta);
 
     const del = document.createElement("button");
     del.type = "button";
     del.className = "btn-delete";
-    del.dataset.id = t.id;
     del.textContent = "Delete";
-    del.setAttribute("aria-label", "Delete transaction " + t.name);
+    del.addEventListener("click", () => deleteTransaction(t.id));
 
     li.append(info, del);
     listEl.appendChild(li);
   });
 }
 
-function renderBalance() {
+// ----- Render: total balance -----
+function renderTotal() {
   const total = transactions.reduce((sum, t) => sum + t.amount, 0);
-  totalEl.textContent = currency.format(total);
+  totalEl.textContent = formatMoney(total);
 }
 
+// ----- Render: pie chart -----
 function renderChart() {
-  const totals = {};
-  transactions.forEach((t) => {
-    totals[t.category] = (totals[t.category] || 0) + t.amount;
-  });
-  const labels = Object.keys(totals);
-  const data = labels.map((l) => totals[l]);
-  const colors = labels.map((l) => CHART_COLORS[categories.indexOf(l) % CHART_COLORS.length]);
-
-  const hasData = labels.length > 0;
-  chartCanvas.parentElement.hidden = !hasData;
-  chartEmpty.hidden = hasData;
-
-  if (!hasData) {
-    if (chart) { chart.destroy(); chart = null; }
-    return;
-  }
-
-  const textColor = getComputedStyle(document.documentElement).getPropertyValue("--text").trim();
+  const categories = Object.keys(CATEGORY_COLORS);
+  const data = categories.map((c) =>
+    transactions.filter((t) => t.category === c).reduce((s, t) => s + t.amount, 0)
+  );
+  if (typeof Chart === "undefined") return;
 
   if (chart) {
-    chart.data.labels = labels;
     chart.data.datasets[0].data = data;
-    chart.data.datasets[0].backgroundColor = colors;
-    chart.options.plugins.legend.labels.color = textColor;
     chart.update();
     return;
   }
-
-  chart = new Chart(chartCanvas, {
+  chart = new Chart(document.getElementById("spending-chart"), {
     type: "pie",
     data: {
-      labels,
-      datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: "transparent" }],
+      labels: categories,
+      datasets: [{ data, backgroundColor: categories.map((c) => CATEGORY_COLORS[c]) }],
     },
     options: {
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
-        legend: { position: "bottom", labels: { color: textColor } },
-        tooltip: {
-          callbacks: { label: (ctx) => " " + ctx.label + ": " + currency.format(ctx.parsed) },
-        },
+        legend: { position: "bottom" },
+        tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${formatMoney(ctx.parsed)}` } },
       },
     },
   });
 }
 
-function render() {
-  renderList();
-  renderBalance();
-  renderChart();
+// ----- Render: monthly summary -----
+function renderMonthly() {
+  monthlyList.innerHTML = "";
+  monthlyEmpty.hidden = transactions.length > 0;
+
+  // Group by month key "yyyy-mm" taken from the dd-mm-yyyy date
+  const months = {};
+  transactions.forEach((t) => {
+    const [, mm, yyyy] = t.date.split("-");
+    const key = `${yyyy}-${mm}`;
+    if (!months[key]) months[key] = { total: 0, Food: 0, Transport: 0, Fun: 0 };
+    months[key].total += t.amount;
+    months[key][t.category] += t.amount;
+  });
+
+  Object.keys(months).sort().reverse().forEach((key) => {
+    const [yyyy, mm] = key.split("-");
+    const label = new Date(yyyy, mm - 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+    const m = months[key];
+
+    const li = document.createElement("li");
+    const head = document.createElement("p");
+    head.className = "month-head";
+    const title = document.createElement("strong");
+    title.textContent = label;
+    const total = document.createElement("span");
+    total.className = "item-amount";
+    total.textContent = formatMoney(m.total);
+    head.append(title, total);
+
+    const detail = document.createElement("p");
+    detail.className = "month-detail";
+    detail.textContent = Object.keys(CATEGORY_COLORS)
+      .map((c) => `${c}: ${formatMoney(m[c])}`)
+      .join("  •  ");
+
+    li.append(head, detail);
+    monthlyList.appendChild(li);
+  });
 }
 
-// ---------- Add transaction ----------
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const name = nameInput.value.trim();
-  const amount = parseFloat(amountInput.value);
-  const category = categorySelect.value;
+function render() {
+  renderList();
+  renderTotal();
+  renderChart();
+  renderMonthly();
+}
 
-  if (!name || amountInput.value === "" || !category) {
-    formError.textContent = "All fields are required.";
-    formError.hidden = false;
-    return;
-  }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    formError.textContent = "Amount must be greater than 0.";
-    formError.hidden = false;
-    return;
-  }
-
-  formError.hidden = true;
-  transactions.push({ id: Date.now(), name, amount, category });
-  save(STORAGE_KEYS.transactions, transactions);
-  form.reset();
-  nameInput.focus();
-  render();
+// ----- Dark / Light mode -----
+function applyTheme(theme) {
+  document.body.classList.toggle("dark", theme === "dark");
+  themeBtn.textContent = theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode";
+}
+themeBtn.addEventListener("click", () => {
+  const next = document.body.classList.contains("dark") ? "light" : "dark";
+  localStorage.setItem(KEYS.theme, next);
+  applyTheme(next);
 });
 
-// ---------- Delete transaction ----------
-listEl.addEventListener("click", (e) => {
-  const btn = e.target.closest(".btn-delete");
-  if (!btn) return;
-  transactions = transactions.filter((t) => String(t.id) !== btn.dataset.id);
-  save(STORAGE_KEYS.transactions, transactions);
-  render();
-});
-
-// ---------- Inisialisasi ----------
-sortSelect.value = sortBy;
-renderCategories();
-applyTheme();
+applyTheme(localStorage.getItem(KEYS.theme) || "light");
 render();
