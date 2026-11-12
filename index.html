@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Expense &amp; Budget Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar, header-container">
+      <h1>Expense &amp; Budget Visualizer</h1>
+    </header>
+     
+    <!-- Total Balance -->
+    <section class="card balance" aria-live="polite">
+      <p class="balance-label">TOTAL BALANCE</p>
+      <p id="total-balance" class="balance-value">$0</p>
+    </section>
+
+    <!-- Input Form -->
+    <section class="card">
+      <h2>Add Transaction</h2>
+      <form id="transaction-form" novalidate>
+        <label for="item-name">Item Name</label>
+        <input id="item-name" type="text" autocomplete="off">
+
+        <label for="item-amount">Amount</label>
+        <input id="item-amount" type="number" min="0" step="any" inputmode="decimal" placeholder="ex. $ 0.00">
+
+        <label for="item-category">Category</label>
+        <select id="item-category">
+            <option></option>
+            <option value="Food">Food</option>
+            <option value="Transport">Transport</option>
+            <option value="Fun">Fun</option>
+        </select>
+
+        <p id="form-error" class="error" role="alert" hidden></p>
+        <button type="submit" class="btn-primary">Add Transaction</button>
+      </form><br>
+      
+    <div class="grid">
+      <!-- Transaction List -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Transactions</h2>
+        </div>
+        <ul id="transaction-list" class="list"></ul>
+        <p id="list-empty" class="empty">No transactions yet. Fill in the form above to get started.</p>
+      </section>
+
+      <!-- Visual Chart -->
+      <section class="card">
+        <h2>Spending by Category</h2>
+        <div class="chart-wrap">
+          <canvas id="spending-chart" aria-label="Pie chart of spending by category" role="img"></canvas>
+        </div>
+        <p id="chart-empty" class="empty">The chart will appear once you add transactions.</p>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="js/script.js"></script>
+</body>
+</html>
